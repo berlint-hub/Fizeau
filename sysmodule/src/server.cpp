@@ -39,52 +39,32 @@ Result Server::command_handler(void *userdata, const IpcServerRequest *r, u8 *ou
             break;
         }
         case FizeauCommandId_SetIsActive: {
-            auto prev_active = std::exchange(self->context.is_active, *(bool *)r->data.ptr);
+            if (r->data.size < sizeof(bool))
+                return FIZEAU_MAKERESULT(INVALID_REQUEST);
+            const auto active = *static_cast<const u8 *>(r->data.ptr) != 0;
+            auto prev_active = std::exchange(self->context.is_active, active);
 
             if (prev_active != self->context.is_active)
-                self->profile.update_active();
+                return self->manager.update_active();
 
             break;
         }
-        case FizeauCommandId_GetProfile: {
-            auto id = *(FizeauProfileId *)r->data.ptr;
-            if (id < FizeauProfileId_Profile1 || id > FizeauProfileId_Profile4)
-                return FIZEAU_MAKERESULT(INVALID_PROFILEID);
-
-            SET_OUTDATA(self->context.profiles[id]);
+        case FizeauCommandId_GetConfiguration: {
+            mutexLock(&self->context.configuration_mutex);
+            FZ_SCOPEGUARD([self] { mutexUnlock(&self->context.configuration_mutex); });
+            SET_OUTDATA(self->context.configuration);
             break;
         }
-        case FizeauCommandId_SetProfile: {
-            auto id = *(FizeauProfileId *)r->data.ptr;
-            if (id < FizeauProfileId_Profile1 || id > FizeauProfileId_Profile4)
-                return FIZEAU_MAKERESULT(INVALID_PROFILEID);
-
-            self->context.profiles[id] = *(FizeauProfile *)((std::uint8_t *)r->data.ptr + std::max(alignof(FizeauProfileId), alignof(FizeauProfile)));
-
-            if (id == self->context.internal_profile || id == self->context.external_profile) {
-                if (auto rc = self->profile.apply(); R_FAILED(rc))
-                    return rc;
-            }
-
-            break;
-        }
-        case FizeauCommandId_GetActiveProfileId: {
-            auto external = *(bool *)r->data.ptr;
-            SET_OUTDATA(!external ? self->context.internal_profile : self->context.external_profile);
-            break;
-        }
-        case FizeauCommandId_SetActiveProfileId: {
-            auto external = *(bool *)r->data.ptr;
-            auto id = *(FizeauProfileId *)((std::uint8_t *)r->data.ptr + std::max(alignof(bool), alignof(FizeauProfileId)));
-            if (id < FizeauProfileId_Profile1 || id > FizeauProfileId_Profile4)
-                return FIZEAU_MAKERESULT(INVALID_PROFILEID);
-
-            (!external ? self->context.internal_profile : self->context.external_profile) = id;
-
-            if (auto rc = self->profile.apply(); R_FAILED(rc))
-                return rc;
-
-            break;
+        case FizeauCommandId_SetConfiguration: {
+            if (r->data.size < sizeof(FizeauConfiguration))
+                return FIZEAU_MAKERESULT(INVALID_REQUEST);
+            Config config;
+            std::memcpy(&config.configuration, r->data.ptr, sizeof(config.configuration));
+            config.sanitize();
+            mutexLock(&self->context.configuration_mutex);
+            self->context.configuration = config.configuration;
+            mutexUnlock(&self->context.configuration_mutex);
+            return self->manager.apply();
         }
         default:
             return MAKERESULT(10, 221);

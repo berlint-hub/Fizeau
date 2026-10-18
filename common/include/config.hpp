@@ -18,6 +18,7 @@
 #pragma once
 
 #include <array>
+#include <string>
 #include <string_view>
 #include <switch.h>
 
@@ -36,6 +37,7 @@ class Config {
             .gamma       = DEFAULT_GAMMA,
             .luminance   = DEFAULT_LUMA,
             .range       = DEFAULT_RANGE,
+            .fake_hdr    = DEFAULT_FAKE_HDR,
         };
 
     public:
@@ -45,20 +47,13 @@ class Config {
         };
 
     public:
-        bool active = true, has_active_override = false;
+        bool active = true;
 
-        FizeauProfileId cur_profile_id = FizeauProfileId_Invalid,
-            internal_profile = FizeauProfileId_Profile1, external_profile = FizeauProfileId_Profile1;
-        bool is_editing_day_profile = false, is_editing_night_profile = false;
-
-        FizeauProfile profile = {
-            .day_settings   = Config::default_settings,
-            .night_settings = Config::default_settings,
-            .components     = Component_All,
-            .filter         = Component_None,
+        FizeauConfiguration configuration = {
+            .settings = Config::default_settings,
+            .components = Component_All,
+            .filter = Component_None,
         };
-
-        void (*parse_profile_switch_action)(Config *, FizeauProfileId) = nullptr;
 
     public:
         static int ini_handler(void *user, const char *section, const char *name, const char *value);
@@ -72,10 +67,8 @@ class Config {
         Result update();
         Result apply();
         Result reset();
-        Result open_profile(FizeauProfileId id);
+        void sanitize();
 
-    private:
-        void sanitize_profile();
 };
 
 } // namespace fz

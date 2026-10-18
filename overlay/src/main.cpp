@@ -31,12 +31,9 @@ class FizeauOverlay: public tsl::Overlay {
             twiliInitialize();
             twiliCreateNamedOutputPipe(&g_twlPipe, "fzovlout");
 #endif
-            fz::Clock::initialize();
-            apmInitialize();
         }
 
         virtual void exitServices() final override {
-            apmExit();
 #ifdef DEBUG
             twiliClosePipe(&g_twlPipe);
             twiliExit();

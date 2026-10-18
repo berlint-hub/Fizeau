@@ -57,6 +57,11 @@ typedef float Gamma;
 #define MAX_GAMMA     5.0f
 #define DEFAULT_GAMMA 2.4f
 
+typedef float FakeHdr;
+#define MIN_FAKE_HDR     0.0f
+#define MAX_FAKE_HDR     1.0f
+#define DEFAULT_FAKE_HDR 0.0f
+
 typedef float Luminance;
 #define MIN_LUMA    -1.0f
 #define MAX_LUMA     1.0f

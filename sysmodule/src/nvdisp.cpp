@@ -64,6 +64,9 @@ Cmu calculate_cmu(FizeauSettings &settings, Component components, Component filt
     regamma_ramp(cmu.lut_2.data(), 512, settings.gamma, 8, 0.0f, 0.125f, off);                          // Set the first part of LUT2 (more precision in darker components)
     regamma_ramp(cmu.lut_2.data() + 512, cmu.lut_2.size() - 512, settings.gamma, 8, 0.125f, 1.0f, off); // Set the second part of LUT2 (less precision in brighter components)
 
+    // SDR contrast enhancement, before dimming and output range mapping.
+    apply_fake_hdr(cmu.lut_2.data(), cmu.lut_2.size(), 8, settings.fake_hdr);
+
     // Apply luminance
     apply_luma(cmu.lut_2.data(), cmu.lut_2.size(), 8, settings.luminance);
 

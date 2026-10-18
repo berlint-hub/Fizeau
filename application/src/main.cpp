@@ -117,27 +117,12 @@ int main(int argc, char **argv) {
     }
 
     if (R_SUCCEEDED(rc))
-        rc = fz::Clock::initialize();
-
-    if (R_SUCCEEDED(rc))
         rc = fizeauInitialize();
     FZ_SCOPEGUARD([] { fizeauExit(); });
 
     if (R_SUCCEEDED(rc))
-        config.read();
-
-    if (R_SUCCEEDED(rc))
-        rc = fizeauSetIsActive(config.active);
-
-    if (R_SUCCEEDED(rc))
-        fizeauSetActiveProfileId(false, config.internal_profile);
-
-    if (R_SUCCEEDED(rc))
-        fizeauSetActiveProfileId(true, config.external_profile);
-
-    if (R_SUCCEEDED(rc))
-        config.open_profile(appletGetOperationMode() == AppletOperationMode_Handheld ?
-                            config.internal_profile : config.external_profile);
+        rc = config.update();
+    const bool loaded_config = R_SUCCEEDED(rc);
 
     while (fz::gfx::loop()) {
         auto slot = fz::gfx::dequeue();
@@ -150,16 +135,7 @@ int main(int argc, char **argv) {
             fz::gui::draw_graph_window(config);
             rc = fz::gui::draw_main_window(config);
 
-            static bool prev_editing_day = false;
-            if (config.is_editing_day_profile && config.is_editing_night_profile) {
-                if (prev_editing_day)
-                    config.is_editing_day_profile   = false, prev_editing_day = false;
-                else
-                    config.is_editing_night_profile = false, prev_editing_day = true;
-            }
-
-            auto &settings = config.is_editing_day_profile ? config.profile.day_settings : config.profile.night_settings;
-            fz::gfx::render_preview(settings, config.profile.components, config.profile.filter,
+            fz::gfx::render_preview(config.configuration.settings, config.configuration.components, config.configuration.filter,
                 preview.width, preview.height, 2, 3);
         }
 
@@ -167,7 +143,8 @@ int main(int argc, char **argv) {
     }
 
     LOG("Exiting Fizeau\n");
-    config.write();
+    if (loaded_config)
+        config.write();
     fz::gfx::wait();
 
     return 0;

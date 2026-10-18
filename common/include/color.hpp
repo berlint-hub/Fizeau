@@ -22,6 +22,7 @@
 #include <tuple>
 
 #include "types.h"
+#include "fake_hdr.hpp"
 
 namespace fz {
 

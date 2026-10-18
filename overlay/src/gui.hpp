@@ -53,10 +53,9 @@ class FizeauOverlayGui: public tsl::Gui {
 
     private:
         Result rc;
-        bool is_day;
+        bool loaded_config = false;
         Config config = {};
 
-        tsl::elm::CustomDrawer      *info_header;
         tsl::elm::ListItem          *active_button;
         tsl::elm::ListItem          *apply_button;
         tsl::elm::TrackBar          *temp_slider;
@@ -66,11 +65,12 @@ class FizeauOverlayGui: public tsl::Gui {
         tsl::elm::NamedStepTrackBar *filter_bar;
         tsl::elm::TrackBar          *contrast_slider;
         tsl::elm::TrackBar          *gamma_slider;
+        tsl::elm::TrackBar          *fake_hdr_slider;
         tsl::elm::TrackBar          *luma_slider;
         tsl::elm::ListItem          *range_button;
 
         tsl::elm::CategoryHeader *temp_header, *sat_header, *hue_header,
-            *components_header, *filter_header, *contrast_header, *gamma_header, *luma_header;
+            *components_header, *filter_header, *contrast_header, *gamma_header, *fake_hdr_header, *luma_header;
 };
 
 } // namespace fz

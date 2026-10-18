@@ -15,255 +15,82 @@
 // You should have received a copy of the GNU General Public License
 // along with Fizeau.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <cstring>
 #include <algorithm>
-#include <bit>
+#include <cmath>
+#include <cstdio>
 #include <string>
 #include <ini.h>
-#include <common.hpp>
 #include <sys/stat.h>
 
-#include "fizeau.h"
 #include "config.hpp"
 
 namespace fz {
 
-#define COMMENT ";"
-
 std::string_view Config::find_config() {
     struct stat tmp;
-    for (auto loc: config_locations) {
+    for (auto loc: config_locations)
         if (::stat(loc.data(), &tmp) == 0)
             return loc;
-    }
     return config_locations[1];
-};
-
-void Config::read() {
-    if (!this->parse_profile_switch_action) {
-        this->parse_profile_switch_action = +[](Config *self, FizeauProfileId profile_id) {
-            if (self->cur_profile_id != FizeauProfileId_Invalid)
-                if (auto rc = self->apply(); R_FAILED(rc))
-                    LOG("Failed to apply config: %#x\n", rc);
-            if (auto rc = self->open_profile(profile_id); R_FAILED(rc))
-                LOG("Failed to open profile: %#x\n", rc);
-        };
-    }
-
-    auto loc = Config::find_config();
-    ini_parse(loc.data(), Config::ini_handler, this);
-
-    if (this->cur_profile_id != FizeauProfileId_Invalid) {
-        if (auto rc = this->apply(); R_FAILED(rc))
-            LOG("Failed to apply config: %#x\n", rc);
-    }
 }
 
-void Config::sanitize_profile() {
-    auto sanitize_minmax = []<typename T>(T& val, auto min, auto max) {
-        val = std::clamp(val, static_cast<T>(min), static_cast<T>(max));
-    };
-
-    auto sanitize_time = [&](Time &time) {
-        sanitize_minmax(time.h, 0, 24);
-        sanitize_minmax(time.m, 0, 60);
-        sanitize_minmax(time.s, 0, 60);
-    };
-
-    auto sanitize_colorrange = [&](ColorRange &range) {
-        sanitize_minmax(range.lo, MIN_RANGE, MAX_RANGE);
-        sanitize_minmax(range.hi, MIN_RANGE, MAX_RANGE);
-    };
-
-    auto sanitize_filter = [&](Component filter) {
-        return std::popcount(static_cast<std::uint32_t>(filter)) >= 1;
-    };
-
-    sanitize_time(this->profile.dusk_begin);
-    sanitize_time(this->profile.dusk_end);
-    sanitize_time(this->profile.dawn_begin);
-    sanitize_time(this->profile.dawn_end);
-
-    sanitize_minmax(this->profile.day_settings  .temperature, MIN_TEMP,     MAX_TEMP);
-    sanitize_minmax(this->profile.night_settings.temperature, MIN_TEMP,     MAX_TEMP);
-
-    sanitize_minmax(this->profile.day_settings  .saturation,  MIN_SAT,      MAX_SAT);
-    sanitize_minmax(this->profile.night_settings.saturation,  MIN_SAT,      MAX_SAT);
-
-    sanitize_minmax(this->profile.day_settings  .hue,         MIN_HUE,      MAX_HUE);
-    sanitize_minmax(this->profile.night_settings.hue,         MIN_HUE,      MAX_HUE);
-
-    sanitize_minmax(this->profile.components, Component_None, Component_All);
-    sanitize_filter(this->profile.filter);
-
-    sanitize_minmax(this->profile.day_settings  .contrast,    MIN_CONTRAST, MAX_CONTRAST);
-    sanitize_minmax(this->profile.night_settings.contrast,    MIN_CONTRAST, MAX_CONTRAST);
-
-    sanitize_minmax(this->profile.day_settings  .gamma,       MIN_GAMMA,    MAX_GAMMA);
-    sanitize_minmax(this->profile.night_settings.gamma,       MIN_GAMMA,    MAX_GAMMA);
-
-    sanitize_minmax(this->profile.day_settings  .luminance,   MIN_LUMA,     MAX_LUMA);
-    sanitize_minmax(this->profile.night_settings.luminance,   MIN_LUMA,     MAX_LUMA);
-
-    sanitize_colorrange(this->profile.day_settings  .range);
-    sanitize_colorrange(this->profile.night_settings.range);
+void Config::read() {
+    ini_parse(Config::find_config().data(), Config::ini_handler, this);
+    this->sanitize();
 }
 
 std::string Config::make() {
-    auto format = []<typename ...Args>(const std::string_view &fmt, Args &&...args) -> std::string {
-        std::string str(std::snprintf(nullptr, 0, fmt.data(), args...), 0);
-        std::snprintf(str.data(), str.capacity(), fmt.data(), args...);
-        return str;
-    };
-
-    auto format_profile = [&format](FizeauProfileId id) -> std::string {
-        return format("profile%u", id + 1);
-    };
-
-    auto format_filter = [](Component f) -> std::string {
-        switch (f) {
-            case Component_Red:   return "red";
-            case Component_Green: return "green";
-            case Component_Blue:  return "blue";
-            default:              return "none";
-        }
-    };
-
-    auto format_components = [](Component c) -> std::string {
-        if (c == Component_None) {
-            return "none";
-        } else if (c == Component_All) {
-            return "all";
-        } else {
-            std::string s;
-            if (c & Component_Red)   s.push_back('r');
-            if (c & Component_Green) s.push_back('g');
-            if (c & Component_Blue)  s.push_back('b');
-            return s;
-        }
-    };
-
-    auto format_time = [&format](Time t) -> std::string {
-        return format("%02d:%02d", t.h, t.m);
-    };
-
-    auto format_range = [&format](ColorRange r) -> std::string {
-        return format("%.2f-%.2f", r.lo, r.hi);
-    };
-
-    std::string str;
-
-    str += std::string(this->has_active_override ? "" : COMMENT) + "active            = " + (this->active ? "true" : "false") + '\n';
-    str += '\n';
-
-
-    if (this->internal_profile < FizeauProfileId_Total)
-        str += "handheld_profile  = " + format_profile(this->internal_profile) + '\n';
-    else
-        str += "handheld_profile  = " + format_profile(FizeauProfileId_Profile1) + '\n';
-    if (this->external_profile < FizeauProfileId_Total)
-        str += "docked_profile    = " + format_profile(this->external_profile) + '\n';
-    else
-        str += "docked_profile    = " + format_profile(FizeauProfileId_Profile2) + '\n';
-    str += '\n';
-
-    for (int id = FizeauProfileId_Profile1; id < FizeauProfileId_Total; ++id) {
-        if (auto rc = this->open_profile(static_cast<FizeauProfileId>(id)); R_FAILED(rc))
-            LOG("Failed to open profile %u: %#x\n", id, rc);
-
-        this->sanitize_profile();
-
-        str += "[profile" + std::to_string(this->cur_profile_id + 1) + "]\n";
-
-        str += "dusk_begin        = " + format_time(this->profile.dusk_begin)                    + '\n';
-        str += "dusk_end          = " + format_time(this->profile.dusk_end)                      + '\n';
-        str += "dawn_begin        = " + format_time(this->profile.dawn_begin)                    + '\n';
-        str += "dawn_end          = " + format_time(this->profile.dawn_end)                      + '\n';
-
-        str += "temperature_day   = " + std::to_string(this->profile.day_settings  .temperature) + '\n';
-        str += "temperature_night = " + std::to_string(this->profile.night_settings.temperature) + '\n';
-
-        str += "saturation_day    = " + std::to_string(this->profile.day_settings  .saturation)  + '\n';
-        str += "saturation_night  = " + std::to_string(this->profile.night_settings.saturation)  + '\n';
-
-        str += "hue_day           = " + std::to_string(this->profile.day_settings  .hue)         + '\n';
-        str += "hue_night         = " + std::to_string(this->profile.night_settings.hue)         + '\n';
-
-        str += "components        = " + format_components(this->profile.components)              + '\n';
-
-        str += "filter            = " + format_filter(this->profile.filter)                      + '\n';
-
-        str += "contrast_day      = " + std::to_string(this->profile.day_settings  .contrast)    + '\n';
-        str += "contrast_night    = " + std::to_string(this->profile.night_settings.contrast)    + '\n';
-
-        str += "gamma_day         = " + std::to_string(this->profile.day_settings  .gamma)       + '\n';
-        str += "gamma_night       = " + std::to_string(this->profile.night_settings.gamma)       + '\n';
-
-        str += "luminance_day     = " + std::to_string(this->profile.day_settings  .luminance)   + '\n';
-        str += "luminance_night   = " + std::to_string(this->profile.night_settings.luminance)   + '\n';
-
-        str += "range_day         = " + format_range(this->profile.day_settings  .range)         + '\n';
-        str += "range_night       = " + format_range(this->profile.night_settings.range)         + '\n';
-
-        str += "dimming_timeout   = " + format_time({ this->profile.dimming_timeout.m, this->profile.dimming_timeout.s }) + '\n';
-
-        str += '\n';
-    }
-
+    this->sanitize();
+    const auto &c = this->configuration;
+    const auto &s = c.settings;
+    std::string str = std::string("active = ") + (this->active ? "true\n" : "false\n");
+    str += "\n[settings]\n";
+    str += "temperature = " + std::to_string(s.temperature) + '\n';
+    str += "saturation = " + std::to_string(s.saturation) + '\n';
+    str += "hue = " + std::to_string(s.hue) + '\n';
+    str += "contrast = " + std::to_string(s.contrast) + '\n';
+    str += "gamma = " + std::to_string(s.gamma) + '\n';
+    str += "luminance = " + std::to_string(s.luminance) + '\n';
+    str += "fake_hdr = " + std::to_string(s.fake_hdr) + '\n';
+    str += "range = " + std::to_string(s.range.lo) + "-" + std::to_string(s.range.hi) + '\n';
+    std::string components;
+    if (c.components & Component_Red) components += 'r';
+    if (c.components & Component_Green) components += 'g';
+    if (c.components & Component_Blue) components += 'b';
+    str += "components = " + (components.empty() ? "none" : components) + '\n';
+    const char *filter = c.filter == Component_Red ? "red" : c.filter == Component_Green ? "green" :
+        c.filter == Component_Blue ? "blue" : "none";
+    str += std::string("filter = ") + filter + '\n';
+    char timeout[16];
+    std::snprintf(timeout, sizeof(timeout), "%02u:%02u", c.dimming_timeout.m, c.dimming_timeout.s);
+    str += std::string("dimming_timeout = ") + timeout + '\n';
     return str;
 }
 
 void Config::write() {
     auto str = this->make();
-
-    auto loc = Config::find_config();
-    FILE *fp = std::fopen(loc.data(), "w");
-    FZ_SCOPEGUARD([&fp] { std::fclose(fp); });
-    if (!fp)
-        return;
-
-    std::fwrite(str.c_str(), str.length(), 1, fp);
+    if (FILE *fp = std::fopen(Config::find_config().data(), "w")) {
+        std::fwrite(str.data(), str.size(), 1, fp);
+        std::fclose(fp);
+    }
 }
 
-Result update(Config &config) {
-    if (auto rc = fizeauGetIsActive(&config.active); R_FAILED(rc))
+Result Config::update() {
+    if (auto rc = fizeauGetIsActive(&this->active); R_FAILED(rc))
         return rc;
-
-    if (auto rc = fizeauGetActiveProfileId(false, &config.internal_profile); R_FAILED(rc))
-        return rc;
-
-    if (auto rc = fizeauGetActiveProfileId(true,  &config.external_profile); R_FAILED(rc))
-        return rc;
-
-    if (auto rc = fizeauGetProfile(config.internal_profile, &config.profile); R_FAILED(rc))
-        return rc;
-
-    return 0;
+    return fizeauGetConfiguration(&this->configuration);
 }
 
 Result Config::apply() {
-    return fizeauSetProfile(this->cur_profile_id, &this->profile);
+    this->sanitize();
+    return fizeauSetConfiguration(&this->configuration);
 }
 
 Result Config::reset() {
-    this->profile.day_settings.temperature = DEFAULT_TEMP,     this->profile.night_settings.temperature = DEFAULT_TEMP;
-    this->profile.day_settings.saturation  = DEFAULT_SAT,      this->profile.night_settings.saturation  = DEFAULT_SAT;
-    this->profile.day_settings.hue         = DEFAULT_HUE,      this->profile.night_settings.hue         = DEFAULT_HUE;
-    this->profile.day_settings.contrast    = DEFAULT_CONTRAST, this->profile.night_settings.contrast    = DEFAULT_CONTRAST;
-    this->profile.day_settings.gamma       = DEFAULT_GAMMA,    this->profile.night_settings.gamma       = DEFAULT_GAMMA;
-    this->profile.day_settings.luminance   = DEFAULT_LUMA,     this->profile.night_settings.luminance   = DEFAULT_LUMA;
-    this->profile.day_settings.range       = DEFAULT_RANGE,    this->profile.night_settings.range       = DEFAULT_RANGE;
-    this->profile.components = Component_All;
-    this->profile.filter     = Component_None;
+    this->configuration.settings = Config::default_settings;
+    this->configuration.components = Component_All;
+    this->configuration.filter = Component_None;
     return this->apply();
-}
-
-Result Config::open_profile(FizeauProfileId id) {
-    if (auto rc = fizeauGetProfile(id, &this->profile); R_FAILED(rc))
-        return rc;
-
-    this->cur_profile_id = id;
-    return 0;
 }
 
 } // namespace fz

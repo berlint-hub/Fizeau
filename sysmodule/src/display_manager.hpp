@@ -29,9 +29,9 @@ namespace fz {
 
 constexpr float dimmed_luma_internal = -0.1f, dimmed_luma_external = -0.7f; // Official values used in 6.0.0 am
 
-class ProfileManager {
+class DisplayManager {
     public:
-        constexpr ProfileManager(Context &context, DisplayController &disp): context(context), disp(disp) { }
+        constexpr DisplayManager(Context &context, DisplayController &disp): context(context), disp(disp) { }
 
         Result initialize();
         Result finalize();
@@ -40,7 +40,7 @@ class ProfileManager {
         Result update_active();
 
     private:
-        static void transition_thread_func(void *args);
+        static void monitor_thread_func(void *args);
         static void event_monitor_thread_func(void *args);
 
     private:
@@ -50,8 +50,8 @@ class ProfileManager {
         std::uint64_t clock_va_base = 0, disp_va_base = 0;
 
         UEvent thread_exit_event = {};
-        Thread transition_thread = {}, event_monitor_thread = {};
-        std::uint8_t transition_thread_stack[0x2000] alignas(0x1000) = {},
+        Thread monitor_thread = {}, event_monitor_thread = {};
+        std::uint8_t monitor_thread_stack[0x2000] alignas(0x1000) = {},
             event_monitor_thread_stack[0x1000] alignas(0x1000) = {};
 
         Event operation_mode_event = {};

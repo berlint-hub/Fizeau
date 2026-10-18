@@ -6,8 +6,9 @@ Adjust the color of the screen of your Nintendo Switch.
   - Modify the color temperature, saturation and hue of the display.
   - Selectively apply corrections to color channels, filter to one single component.
   - Tone mapping with programmable contrast, gamma, luminance, and color range.
-  - Schedule settings to be applied at dusk/dawn, with smooth transitions.
+  - One shared configuration for handheld and docked mode, without profiles or day/night switching.
   - Configurable screen dimming.
+  - Adjustable Fake HDR (SDR contrast enhancement).
 
 # Images
 <p float="left">
@@ -32,6 +33,52 @@ You can refer to the built-in help. Navigate with either the touchscreen or the 
 
 ## Settings
 Settings are saved at `/switch/Fizeau/config.ini` and `/config/Fizeau/config.ini` (in order of priority), which you can also edit.
+
+## Single configuration
+
+There is one set of settings, shared by the internal screen and the docked display.
+There are no profiles, night settings, dawn/dusk schedules or automatic color
+transitions. Use **Settings → Apply** to apply edits and **Save** to apply and
+persist them. The application also saves edits on normal exit. The Tesla overlay
+edits the same settings, with **Apply settings** and save-on-close.
+
+The configuration now uses `[settings]` with unsuffixed keys (see
+[`misc/default.ini`](misc/default.ini)). Existing legacy INI files are imported
+using only `[profile1]` daytime values. Night values, other profiles, profile
+selectors and dawn/dusk times are ignored. On the next save, the file is rewritten
+in the single-settings format. Back up your old INI first if you want to retain
+those discarded profiles. Idle dimming is still available; it is independent of
+time of day. `dimming_timeout = 00:00` disables Fizeau's extra idle dimming.
+
+The application and overlay load the running service's settings when opened,
+so reopening either does not replace live changes with old INI data.
+Manual INI edits are loaded by the sysmodule on restart.
+
+## Fake HDR
+
+In the application's **Correction** tab or the Tesla overlay, adjust **Fake HDR**
+from `0.0` (off, default) to `1.0` (full strength). Try `0.5` to start.
+Press Y on the overlay slider to reset it. Save settings as usual to keep changes
+after reboot:
+
+```ini
+active = true
+[settings]
+fake_hdr = 0.5
+```
+
+This is a global, per-channel SDR S-curve in the CMU output LUT: darker shadows,
+brighter highlights, and more midtone contrast, with black and white endpoints
+preserved. It runs before luminance/dimming and output range mapping. It is **not
+real HDR**, does not add HDR metadata, recover lost image detail, perform local
+tone mapping, or increase the panel's peak brightness. Per-channel mapping can
+also change saturation. Strong existing contrast/luminance adjustments may still
+clip details. The image preview remains matrix-only (as for gamma/luminance);
+the gamma ramp plot includes Fake HDR.
+
+**Install the rebuilt application, overlay and sysmodule together, then reboot.**
+The single configuration uses new IPC commands; retired profile commands are
+rejected so mismatched old/new binaries cannot reinterpret incompatible data.
 
 # Building
   - Compiling requires a working [devkitA64](https://devkitpro.org/wiki/devkitPro_pacman) installation, with package `switch-glm` installed. You also need `rsync` to be available (it should be by default on all major operating systems).
@@ -70,3 +117,15 @@ Official software uses precalculated default gamma ramps, and apply modification
 
 # Credits
   - [zakiph27](https://github.com/zakiph27) for the icon and testing.
+
+## Host tests
+
+The curve, LUT integration and configuration can be tested without devkitA64
+(initialise the inih submodule first):
+
+```sh
+git submodule update --init lib/inih/inih
+make -C tests test
+```
+
+These tests use minimal host-only libnx declarations, not Switch hardware.

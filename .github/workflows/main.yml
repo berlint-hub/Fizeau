@@ -1,23 +1,37 @@
 name: Build
 
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
 
 jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - name: Test color pipeline and single configuration
+      run: make -C tests test
+
   build:
     runs-on: ubuntu-latest
-    container: devkitpro/devkita64:latest
+    container: devkitpro/devkita64:20260215
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
 
     - name: Build
       run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
         make -C common -j$(nproc)
         make dist -j$(nproc)
 
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       with:
         name: Fizeau
         path: out/Fizeau-*.zip
+        if-no-files-found: error

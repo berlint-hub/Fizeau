@@ -25,37 +25,14 @@
 
 namespace fz {
 
-enum FizeauProfileState: std::uint32_t {
-    Day,
-    Night,
-};
-
 struct Context {
-    bool is_lite = false, is_active = false;
-
-    FizeauProfileId internal_profile = FizeauProfileId_Invalid,
-        external_profile = FizeauProfileId_Invalid;
-
-    std::array<FizeauProfile, FizeauProfileId_Total> profiles = {
-        FizeauProfile{
-            .day_settings   = Config::default_settings,
-            .night_settings = Config::default_settings,
-        },
-        FizeauProfile{
-            .day_settings   = Config::default_settings,
-            .night_settings = Config::default_settings,
-        },
-        FizeauProfile{
-            .day_settings   = Config::default_settings,
-            .night_settings = Config::default_settings,
-        },
-        FizeauProfile{
-            .day_settings   = Config::default_settings,
-            .night_settings = Config::default_settings,
-        },
+    bool is_lite = false, is_active = true;
+    Mutex configuration_mutex = {};
+    FizeauConfiguration configuration = {
+        .settings = Config::default_settings,
+        .components = Component_All,
+        .filter = Component_None,
     };
-
-    std::array<FizeauProfileState, FizeauProfileId_Total> profile_states = {};
 
     DisplayController::CmuShadow cmu_shadow_internal = {}, cmu_shadow_external = {};
 };

@@ -30,13 +30,6 @@ namespace fz::gui {
 
 namespace  {
 
-constexpr std::array profile_names = {
-    "Profile 1",
-    "Profile 2",
-    "Profile 3",
-    "Profile 4",
-};
-
 constexpr std::array filters_names = {
     "None",
     "Red",
@@ -56,13 +49,10 @@ void exit() { }
 namespace {
 
 template <typename T, typename ...Args>
-bool new_slider(auto name, auto label, T &val, T min, T max, auto fmt, Args &&...args) {
-    auto [width, height] = im::GetIO().DisplaySize;
-    auto slider_pos = im::GetWindowPos().x + 0.04f * width;
+bool new_slider(auto label, T &val, T min, T max, auto fmt, Args &&...args) {
     bool ret = false;
-    im::PushItemWidth(im::GetWindowWidth() - 0.08f * width);
+    im::PushItemWidth(-1.0f);
     FZ_SCOPEGUARD([] { im::PopItemWidth(); });
-    im::TextUnformatted(name); im::SameLine(); im::SetCursorPosX(slider_pos);
     if constexpr (std::is_floating_point_v<T>) {
         ret |= im::SliderFloat(label, reinterpret_cast<float *>(&val), min, max, fmt);
         ret |= swkbd::handle(label, &val, min, max, fmt, args...);
@@ -73,34 +63,13 @@ bool new_slider(auto name, auto label, T &val, T min, T max, auto fmt, Args &&..
     return ret;
 };
 
-bool new_times(auto name, auto labelh, auto labelm, Time &t) {
-    auto [width, height] = im::GetIO().DisplaySize;
-    im::PushItemWidth(im::GetWindowWidth() * 0.2f);
-    FZ_SCOPEGUARD([] { im::PopItemWidth(); });
-
-    bool ret = false;
-    im::TextUnformatted(name);
-    im::SameLine(); im::SetCursorPosX(0.08f * width);
-    int int_h = t.h, int_m = t.m;
-    ret |= im::DragInt(labelh, &int_h, 0.05f, 0, 23, "%02dh");
-    ret |= swkbd::handle(labelh, &int_h, 0, 23);
-    im::SameLine();
-    ret |= im::DragInt(labelm, &int_m, 0.05f, 0, 59, "%02dm");
-    ret |= swkbd::handle(labelm, &int_m, 0, 59);
-    t.h = static_cast<std::uint8_t>(int_h), t.m = static_cast<std::uint8_t>(int_m);
-
-    return ret;
-};
-
-bool new_range(auto name, auto labelcb, auto labello, auto labelhi, ColorRange &range) {
+bool new_range(auto labelcb, auto labello, auto labelhi, ColorRange &range) {
     auto [width, height] = im::GetIO().DisplaySize;
     im::PushItemWidth(im::GetWindowWidth() * 0.2f);
     FZ_SCOPEGUARD([] { im::PopItemWidth(); });
 
     bool is_full_range = (range.lo == MIN_RANGE) && (range.hi == MAX_RANGE);
     bool ret = false;
-    im::TextUnformatted(name);
-    im::SameLine(); im::SetCursorPosX(0.08f * width);
     if (im::Checkbox(labelcb, &is_full_range)) {
         ret = true;
         if (is_full_range)
@@ -159,41 +128,25 @@ void new_plot(float *data, std::size_t data_size, const ImVec2 &scale, const ImV
     }
 }
 
-Result draw_profile_tab(Config &ctx) {
-    if (!im::BeginTabItem("Profile"))
+Result draw_settings_tab(Config &ctx) {
+    if (!im::BeginTabItem("Settings"))
         return 0;
-
-    im::TextUnformatted("Active handheld profile:");
-    if (im::Combo("##activeintp", reinterpret_cast<int *>(&ctx.internal_profile), profile_names.data(), profile_names.size())) {
-        if (auto rc = fizeauSetActiveProfileId(false, ctx.internal_profile); R_FAILED(rc))
-            return rc;
-    }
-
-    im::TextUnformatted("Active docked profile:");
-    if (im::Combo("##activeextp", reinterpret_cast<int *>(&ctx.external_profile), profile_names.data(), profile_names.size())) {
-        if (auto rc = fizeauSetActiveProfileId(true, ctx.external_profile); R_FAILED(rc))
-            return rc;
-    }
-
-    im::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 3.0f);
-    im::TextUnformatted("Currently editing profile:");
-    if (im::Combo("##editp", reinterpret_cast<int *>(&ctx.cur_profile_id), profile_names.data(), profile_names.size())) {
-        if (auto rc = ctx.open_profile(ctx.cur_profile_id); R_FAILED(rc))
-            return rc;
-    }
-
+    im::TextUnformatted("One configuration for handheld and docked mode.");
     if (im::Button("Apply")) {
         if (auto rc = ctx.apply(); R_FAILED(rc))
             return rc;
-        ctx.is_editing_day_profile = ctx.is_editing_night_profile = false;
     }
-
     im::SameLine();
     if (im::Button("Reset")) {
-        ctx.reset();
-        ctx.is_editing_day_profile = ctx.is_editing_night_profile = false;
+        if (auto rc = ctx.reset(); R_FAILED(rc))
+            return rc;
     }
-
+    im::SameLine();
+    if (im::Button("Save")) {
+        if (auto rc = ctx.apply(); R_FAILED(rc))
+            return rc;
+        ctx.write();
+    }
     im::EndTabItem();
     return 0;
 }
@@ -205,43 +158,40 @@ Result draw_color_tab(Config &ctx) {
     auto [width, height] = im::GetIO().DisplaySize;
 
     static bool enable_extra_hot_temps = false;
-    if ((ctx.profile.day_settings.temperature > D65_TEMP) ||(ctx.profile.night_settings.temperature > D65_TEMP))
+    if (ctx.configuration.settings.temperature > D65_TEMP)
         enable_extra_hot_temps = true;
 
     // Temperature sliders
     im::SeparatorText("Temperature");
     auto max_temp = enable_extra_hot_temps ? MAX_TEMP : D65_TEMP;
-    ctx.is_editing_day_profile   |= new_slider("Day:",   "##tempd", ctx.profile.day_settings  .temperature, MIN_TEMP, max_temp, "%d°K");
-    ctx.is_editing_night_profile |= new_slider("Night:", "##tempn", ctx.profile.night_settings.temperature, MIN_TEMP, max_temp, "%d°K");
+    (void)new_slider("##tempd", ctx.configuration.settings.temperature, MIN_TEMP, max_temp, "%d°K");
     im::Checkbox("Enable blue temperatures", &enable_extra_hot_temps);
 
     // Saturation sliders
     im::SeparatorText("Saturation");
-    ctx.is_editing_day_profile   |= new_slider("Day:",   "##satd", ctx.profile.day_settings  .saturation, MIN_SAT, MAX_SAT, "%.2f");
-    ctx.is_editing_night_profile |= new_slider("Night:", "##satn", ctx.profile.night_settings.saturation, MIN_SAT, MAX_SAT, "%.2f");
+    (void)new_slider("##satd", ctx.configuration.settings.saturation, MIN_SAT, MAX_SAT, "%.2f");
 
     // Hue sliders
     im::SeparatorText("Hue");
-    ctx.is_editing_day_profile   |= new_slider("Day:",   "##hued", ctx.profile.day_settings  .hue, MIN_HUE, MAX_HUE, "%.2f");
-    ctx.is_editing_night_profile |= new_slider("Night:", "##huen", ctx.profile.night_settings.hue, MIN_HUE, MAX_HUE, "%.2f");
+    (void)new_slider("##hued", ctx.configuration.settings.hue, MIN_HUE, MAX_HUE, "%.2f");
 
     // Components checkboxes
     im::SeparatorText("Channels");
 
     auto items_pos = im::GetWindowPos().x + 0.09f * width;
 
-    std::uint32_t c = ctx.profile.components;
+    std::uint32_t c = ctx.configuration.components;
     im::TextUnformatted("Components:");  im::SameLine(); im::SetCursorPosX(items_pos);
     im::CheckboxFlags("Red##compr",   &c, Component_Red);   im::SameLine();
     im::CheckboxFlags("Green##compg", &c, Component_Green); im::SameLine();
     im::CheckboxFlags("Blue##compb",  &c, Component_Blue);
-    ctx.profile.components = static_cast<Component>(c);
+    ctx.configuration.components = static_cast<Component>(c);
 
-    int filter = (ctx.profile.filter == Component_None) ? 0 : std::countr_zero(static_cast<std::uint32_t>(ctx.profile.filter)) + 1;
+    int filter = (ctx.configuration.filter == Component_None) ? 0 : std::countr_zero(static_cast<std::uint32_t>(ctx.configuration.filter)) + 1;
     im::TextUnformatted("Filter:"); im::SameLine(); im::SetCursorPosX(items_pos);
     im::SetNextItemWidth(0.2f * width);
     if (im::Combo("##filter", &filter, filters_names.data(), filters_names.size()))
-        ctx.profile.filter = static_cast<Component>(filter ? BIT(filter - 1) : filter);
+        ctx.configuration.filter = static_cast<Component>(filter ? BIT(filter - 1) : filter);
 
     im::EndTabItem();
     return 0;
@@ -253,62 +203,31 @@ Result draw_correction_tab(Config &ctx) {
 
     // Contrast sliders
     im::SeparatorText("Contrast");
-    ctx.is_editing_day_profile   |= new_slider("Day:",   "##contrastd", ctx.profile.day_settings  .contrast, MIN_CONTRAST, MAX_CONTRAST, "%.2f");
-    ctx.is_editing_night_profile |= new_slider("Night:", "##contrastn", ctx.profile.night_settings.contrast, MIN_CONTRAST, MAX_CONTRAST, "%.2f");
+    (void)new_slider("##contrastd", ctx.configuration.settings.contrast, MIN_CONTRAST, MAX_CONTRAST, "%.2f");
 
     // Gamma sliders
     im::SeparatorText("Gamma");
-    ctx.is_editing_day_profile   |= new_slider("Day:",   "##gammad", ctx.profile.day_settings  .gamma, MIN_GAMMA, MAX_GAMMA, "%.2f");
-    ctx.is_editing_night_profile |= new_slider("Night:", "##gamman", ctx.profile.night_settings.gamma, MIN_GAMMA, MAX_GAMMA, "%.2f");
+    (void)new_slider("##gammad", ctx.configuration.settings.gamma, MIN_GAMMA, MAX_GAMMA, "%.2f");
+
+    im::SeparatorText("Fake HDR (SDR effect)");
+    (void)new_slider("##hdrd", ctx.configuration.settings.fake_hdr, MIN_FAKE_HDR, MAX_FAKE_HDR, "%.2f");
 
     // Luminance sliders
     im::SeparatorText("Luminance");
-    ctx.is_editing_day_profile   |= new_slider("Day:",   "##lumad", ctx.profile.day_settings  .luminance, MIN_LUMA, MAX_LUMA, "%.2f", true);
-    ctx.is_editing_night_profile |= new_slider("Night:", "##luman", ctx.profile.night_settings.luminance, MIN_LUMA, MAX_LUMA, "%.2f", true);
+    (void)new_slider("##lumad", ctx.configuration.settings.luminance, MIN_LUMA, MAX_LUMA, "%.2f", true);
 
     // Color range sliders
     im::SeparatorText("Color range");
-    ctx.is_editing_day_profile   |= new_range("Day:",   "Full range##d", "##rangeld", "##ranghd", ctx.profile.day_settings  .range);
-    ctx.is_editing_night_profile |= new_range("Night:", "Full range##n", "##rangeln", "##ranghn", ctx.profile.night_settings.range);
+    (void)new_range("Full range##d", "##rangeld", "##ranghd", ctx.configuration.settings.range);
 
     im::EndTabItem();
     return 0;
 }
 
-Result draw_time_tab(Config &ctx) {
-    if (!im::BeginTabItem("Time"))
+Result draw_display_tab(Config &ctx) {
+    if (!im::BeginTabItem("Display"))
         return 0;
-
     auto [width, height] = im::GetIO().DisplaySize;
-
-    bool has_changed = false;
-
-    // Dusk
-    im::SeparatorText("Dusk");
-    has_changed |= new_times("Start:", "##dush", "##dusm", ctx.profile.dusk_begin);
-    has_changed |= new_times("End:",   "##dueh", "##duem", ctx.profile.dusk_end);
-
-    if (ctx.profile.dusk_end >= ctx.profile.dusk_begin) {
-        auto diff = ctx.profile.dusk_end - ctx.profile.dusk_begin;
-        im::Text("Dusk will begin at %02u:%02u and last for %02uh%02um", ctx.profile.dusk_begin.h, ctx.profile.dusk_begin.m, diff.h, diff.m);
-    } else {
-        im::TextColored({ 1.00f, 0.33f, 0.33f, 1.0f }, "Invalid dusk transition times!");
-    }
-
-    // Dawn
-    im::SeparatorText("Dawn");
-    has_changed |= new_times("Start:", "##dash", "##dasm", ctx.profile.dawn_begin);
-    has_changed |= new_times("End:",   "##daeh", "##daem", ctx.profile.dawn_end);
-
-    if (ctx.profile.dawn_end >= ctx.profile.dawn_begin) {
-        auto diff = ctx.profile.dawn_end - ctx.profile.dawn_begin;
-        im::Text("Dawn will begin at %02u:%02u and last for %02uh%02um", ctx.profile.dawn_begin.h, ctx.profile.dawn_begin.m, diff.h, diff.m);
-    } else {
-        im::TextColored({ 1.00f, 0.33f, 0.33f, 1.0f }, "Invalid dawn transition times!");
-    }
-
-    if (has_changed)
-        ctx.has_active_override = false;
 
     // Dimming timeout
     {
@@ -319,7 +238,7 @@ Result draw_time_tab(Config &ctx) {
         im::TextUnformatted("Timeout:");
 
         im::SameLine(); im::SetCursorPosX(0.08f * width);
-        int int_m = ctx.profile.dimming_timeout.m, int_s = ctx.profile.dimming_timeout.s;
+        int int_m = ctx.configuration.dimming_timeout.m, int_s = ctx.configuration.dimming_timeout.s;
         im::DragInt("##dimm", &int_m, 0.05f, 0, 59, "%02dm");
         swkbd::handle("##dimm", &int_m, 0, 59);
         im::SameLine();
@@ -328,7 +247,7 @@ Result draw_time_tab(Config &ctx) {
 
         im::TextUnformatted("Set to 0 to use the system setting");
 
-        ctx.profile.dimming_timeout.m = static_cast<std::uint8_t>(int_m), ctx.profile.dimming_timeout.s = static_cast<std::uint8_t>(int_s);
+        ctx.configuration.dimming_timeout.m = static_cast<std::uint8_t>(int_m), ctx.configuration.dimming_timeout.s = static_cast<std::uint8_t>(int_s);
     }
 
     im::EndTabItem();
@@ -353,12 +272,17 @@ Result draw_help_tab(Config &ctx) {
     if (im::CollapsingHeader("Documentation")) {
         im::BulletText(
 R"(The temperature slider adjusts the color
-temperature of the screen. Use this as a night
-color feature.)");
+temperature of the screen.)");
         im::BulletText(
 R"(The filter feature can be used to restrict the color
 displayed to one single component (red, green,
 or blue).)");
+        im::BulletText(
+R"(Fake HDR adds a smooth SDR contrast curve.
+0 is off, 1 is full strength. It does not enable
+HDR output or increase the display peak brightness.
+The image preview only shows matrix corrections;
+use the gamma ramp plot to inspect this curve.)");
         im::BulletText(
 R"(The gamma slider adjusts the regamma ramp.
 This can be useful on bad/old monitors.)");
@@ -408,19 +332,15 @@ Result draw_main_window(Config &ctx) {
     if (im::Checkbox("Correction active", &ctx.active)) {
         if (auto rc = fizeauSetIsActive(ctx.active); R_FAILED(rc))
             return rc;
-        ctx.has_active_override = true;
     }
 
-    // Time & FPS
-    auto time = Clock::get_current_time();
     im::SameLine();
-    im::SetCursorPosX(im::GetCursorPosX() + 12.0f);
-    im::Text("Time: %02d:%02d:%02d - Fps: %.2f", time.h, time.m, time.s, im::GetIO().Framerate);
+    im::Text("FPS: %.2f", im::GetIO().Framerate);
 
     im::BeginTabBar("##tab_bar", ImGuiTabBarFlags_NoTooltip);
     FZ_SCOPEGUARD([] { im::EndTabBar(); });
 
-    if (auto rc = draw_profile_tab(ctx); R_FAILED(rc))
+    if (auto rc = draw_settings_tab(ctx); R_FAILED(rc))
         return rc;
 
     if (auto rc = draw_color_tab(ctx); R_FAILED(rc))
@@ -429,7 +349,7 @@ Result draw_main_window(Config &ctx) {
     if (auto rc = draw_correction_tab(ctx); R_FAILED(rc))
         return rc;
 
-    if (auto rc = draw_time_tab(ctx); R_FAILED(rc))
+    if (auto rc = draw_display_tab(ctx); R_FAILED(rc))
         return rc;
 
     if (auto rc = draw_help_tab(ctx); R_FAILED(rc))
@@ -439,11 +359,7 @@ Result draw_main_window(Config &ctx) {
 }
 
 void draw_preview_window(Config &ctx, DkResHandle preview_ref_handle, DkResHandle preview_mat_handle) {
-    std::array<char, 0x40> buf;
-    std::snprintf(buf.data(), buf.size(), "Preview (%s)###preview",
-        ctx.is_editing_day_profile ? "day" : ctx.is_editing_night_profile ? "night" : "none");
-
-    if (!im::Begin(buf.data(), nullptr, ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize |
+    if (!im::Begin("Preview###preview", nullptr, ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove))
         return;
     FZ_SCOPEGUARD([] { im::End(); });
@@ -461,11 +377,7 @@ void draw_preview_window(Config &ctx, DkResHandle preview_ref_handle, DkResHandl
 }
 
 void draw_graph_window(Config &ctx) {
-    std::array<char, 0x40> buf;
-    std::snprintf(buf.data(), buf.size(), "Gamma ramps (%s)###gammaramp",
-        ctx.is_editing_day_profile ? "day" : ctx.is_editing_night_profile ? "night" : "none");
-
-    if (!im::Begin(buf.data(), nullptr, ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize |
+    if (!im::Begin("Gamma ramps###gammaramp", nullptr, ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove))
         return;
     FZ_SCOPEGUARD([] { im::End(); });
@@ -474,7 +386,7 @@ void draw_graph_window(Config &ctx) {
     im::SetWindowPos( { 0.53f * width, 0.60f * height }, ImGuiCond_Always);
     im::SetWindowSize({ 0.38f * width, 0.35f * height }, ImGuiCond_Always);
 
-    FizeauSettings set = ctx.is_editing_day_profile ? ctx.profile.day_settings : ctx.profile.night_settings;
+    const auto &set = ctx.configuration.settings;
 
     // Calculate ramps
     std::array<std::uint16_t, 256> lut1;
@@ -484,6 +396,7 @@ void draw_graph_window(Config &ctx) {
     degamma_ramp(lut1.data(), lut1.size(), DEFAULT_GAMMA, 8);
     regamma_ramp(lut2.data(), lut2.size(), set.gamma, 8, 0.0f, 1.0f, off);
 
+    apply_fake_hdr(lut2.data(), lut2.size(), 8, set.fake_hdr);
     apply_luma(lut2.data(), lut2.size(), 8, set.luminance);
     apply_range(lut2.data(), lut2.size(), 8, set.range.lo, std::min(set.range.hi, lut2.back() / 255.0f));
 

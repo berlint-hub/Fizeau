@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <cstdlib>
 #include <cstdint>
@@ -23,6 +25,7 @@ constexpr int ctoi(char c) {
 }
 
 constexpr int atoi(std::string_view s) {
+    if (s.empty()) return 0;
     int mult = 1, res = 0;
     switch (s.front()) {
         case '-':
@@ -43,6 +46,7 @@ static_assert(atoi("+10") == 10);
 static_assert(atoi("-0099") == -99);
 
 constexpr double atof(std::string_view s) {
+    if (s.empty()) return 0.0;
     double mult = 1, res = 0, decimal = 1;
     switch (s.front()) {
         case '-':
@@ -78,10 +82,6 @@ static_assert(atof("-00333.444") == -333.444);
 int Config::ini_handler(void *user, const char *section, const char *name, const char *value) {
     Config *config = static_cast<Config *>(user);
     std::string_view v = value;
-
-    auto profile_name_to_id = [](const std::string_view &str) -> FizeauProfileId {
-        return static_cast<FizeauProfileId>(str.back() - '0' - 1);
-    };
 
     auto parse_components = [](const std::string_view &str) -> Component {
         if (strcasecmp(str.data(), "none") == 0) {
@@ -128,79 +128,63 @@ int Config::ini_handler(void *user, const char *section, const char *name, const
     static_assert(parse_range("0.18-0.92") == ColorRange{0.18, 0.92});
 
     if (MATCH_ENTRY("", "active")) {
-        if (MATCH(value, "1") || strcasecmp(value, "true") == 0)
-            config->active = true;
-        else
-            config->active = false;
-        config->has_active_override = true;
-    } else if (MATCH_ENTRY("", "handheld_profile")) {
-        config->internal_profile = profile_name_to_id(v);
-    } else if (MATCH_ENTRY("", "docked_profile")) {
-        config->external_profile = profile_name_to_id(v);
-    } else if (std::strcmp(section, "profile") > 0) {
-        auto id = profile_name_to_id(section);
-        if (config->cur_profile_id != id && config->parse_profile_switch_action) {
-            config->parse_profile_switch_action(config, id);
-            config->cur_profile_id = id;
-        }
-
-        void *target = nullptr;
-        #define MATCH_SET(s1, s2, t) (target = &t, MATCH(s1, s2))
-        #define SET(v) *reinterpret_cast<decltype(v) *>(target) = v
-
-        auto &p = config->profile;
-        if (
-            MATCH_SET(name, "dusk_begin", p.dusk_begin) ||
-            MATCH_SET(name, "dusk_end",   p.dusk_end)   ||
-            MATCH_SET(name, "dawn_begin", p.dawn_begin) ||
-            MATCH_SET(name, "dawn_end",   p.dawn_end)
-        ) {
-            SET(parse_time(v));
-        } else if (
-            MATCH_SET(name, "temperature_day",   p.day_settings  .temperature) ||
-            MATCH_SET(name, "temperature_night", p.night_settings.temperature)
-        ) {
-            SET(atoi(v));
-        } else if (
-            MATCH_SET(name, "saturation_day",   p.day_settings  .saturation) ||
-            MATCH_SET(name, "saturation_night", p.night_settings.saturation) ||
-            MATCH_SET(name, "hue_day",          p.day_settings  .hue)        ||
-            MATCH_SET(name, "hue_night",        p.night_settings.hue)        ||
-            MATCH_SET(name, "contrast_day",     p.day_settings  .contrast)   ||
-            MATCH_SET(name, "contrast_night",   p.night_settings.contrast)   ||
-            MATCH_SET(name, "gamma_day",        p.day_settings  .gamma)      ||
-            MATCH_SET(name, "gamma_night",      p.night_settings.gamma)      ||
-            MATCH_SET(name, "luminance_day",    p.day_settings  .luminance)  ||
-            MATCH_SET(name, "luminance_night",  p.night_settings.luminance)
-        ) {
-            float f = atof(v);
-            SET(f);
-        } else if (
-            MATCH_SET(name, "components",       p.components) ||
-            MATCH_SET(name, "components_day",   p.components) ||
-            MATCH_SET(name, "components_night", p.components)
-        ) {
-            SET(parse_components(v));
-        } else if (
-            MATCH_SET(name, "filter",       p.filter) ||
-            MATCH_SET(name, "filter_day",   p.filter) ||
-            MATCH_SET(name, "filter_night", p.filter)
-        ) {
-            SET(parse_filter(v));
-        } else if (
-            MATCH_SET(name, "range_day",   p.day_settings  .range) ||
-            MATCH_SET(name, "range_night", p.night_settings.range)
-        ) {
-            SET(parse_range(v));
-        } else if (MATCH(name, "dimming_timeout")) {
-            auto t = parse_time(v);
-            config->profile.dimming_timeout = { 0, t.h, t.m };
-        }
-    } else {
-        return 0;
+        config->active = MATCH(value, "1") || strcasecmp(value, "true") == 0;
+        return 1;
     }
 
+    // One-time legacy import: only daytime values from profile1 are used.
+    // All other profiles, night values, selectors and schedules are ignored.
+    std::string_view key = name;
+    const bool legacy = MATCH(section, "profile1");
+    if (!legacy && !MATCH(section, "settings") && !MATCH(section, ""))
+        return 1;
+    if (legacy && key.ends_with("_day"))
+        key.remove_suffix(4);
+    else if (legacy && key.ends_with("_night"))
+        return 1;
+    if (v.empty())
+        return 1;
+
+    auto &c = config->configuration;
+    auto &s = c.settings;
+    if (key == "temperature") s.temperature = atoi(v);
+    else if (key == "saturation") s.saturation = atof(v);
+    else if (key == "hue") s.hue = atof(v);
+    else if (key == "contrast") s.contrast = atof(v);
+    else if (key == "gamma") s.gamma = atof(v);
+    else if (key == "luminance") s.luminance = atof(v);
+    else if (key == "fake_hdr") s.fake_hdr = atof(v);
+    else if (key == "components") c.components = parse_components(v);
+    else if (key == "filter") c.filter = parse_filter(v);
+    else if (key == "range" && v.find('-') != std::string_view::npos) s.range = parse_range(v);
+    else if (key == "dimming_timeout" && v.find(':') != std::string_view::npos) {
+        auto t = parse_time(v);
+        c.dimming_timeout = { 0, t.h, t.m };
+    }
     return 1;
+}
+
+void Config::sanitize() {
+    auto &s = this->configuration.settings;
+    auto finite_clamp = [](float v, float lo, float hi, float fallback) {
+        return std::isfinite(v) ? std::clamp(v, lo, hi) : fallback;
+    };
+    s.temperature = std::clamp(s.temperature, MIN_TEMP, MAX_TEMP);
+    s.saturation = finite_clamp(s.saturation, MIN_SAT, MAX_SAT, DEFAULT_SAT);
+    s.hue = finite_clamp(s.hue, MIN_HUE, MAX_HUE, DEFAULT_HUE);
+    s.contrast = finite_clamp(s.contrast, MIN_CONTRAST, MAX_CONTRAST, DEFAULT_CONTRAST);
+    s.gamma = finite_clamp(s.gamma, MIN_GAMMA, MAX_GAMMA, DEFAULT_GAMMA);
+    s.luminance = finite_clamp(s.luminance, MIN_LUMA, MAX_LUMA, DEFAULT_LUMA);
+    s.fake_hdr = finite_clamp(s.fake_hdr, MIN_FAKE_HDR, MAX_FAKE_HDR, DEFAULT_FAKE_HDR);
+    s.range.lo = finite_clamp(s.range.lo, MIN_RANGE, MAX_RANGE, MIN_RANGE);
+    s.range.hi = finite_clamp(s.range.hi, s.range.lo, MAX_RANGE, MAX_RANGE);
+    auto &c = this->configuration;
+    c.components = static_cast<Component>(static_cast<unsigned>(c.components) & Component_All);
+    if (c.filter != Component_Red && c.filter != Component_Green && c.filter != Component_Blue)
+        c.filter = Component_None;
+    c.dimming_timeout.h = 0;
+    c.dimming_timeout.m = std::min<unsigned>(c.dimming_timeout.m, 59);
+    c.dimming_timeout.s = std::min<unsigned>(c.dimming_timeout.s, 59);
 }
 
 } // namespace fz

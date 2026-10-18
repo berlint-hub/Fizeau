@@ -30,26 +30,15 @@ extern "C" {
 #endif
 
 typedef enum {
-    FizeauCommandId_GetIsActive,
-    FizeauCommandId_SetIsActive,
-    FizeauCommandId_GetProfile,
-    FizeauCommandId_SetProfile,
-    FizeauCommandId_GetActiveProfileId,
-    FizeauCommandId_SetActiveProfileId,
+    FizeauCommandId_GetIsActive = 0,
+    FizeauCommandId_SetIsActive = 1,
+    // IDs 2-7 are retired profile commands. Never reuse them.
+    FizeauCommandId_GetConfiguration = 8,
+    FizeauCommandId_SetConfiguration = 9,
 } FizeauCommandId;
 
-typedef enum {
-    FizeauProfileId_Profile1,
-    FizeauProfileId_Profile2,
-    FizeauProfileId_Profile3,
-    FizeauProfileId_Profile4,
-    FizeauProfileId_Total,
-    FizeauProfileId_Invalid = 0xffff,
-} FizeauProfileId;
-
-#define FIZEAU_RC_MODULE            R_MODULE(0xf12)
-#define FIZEAU_RC_INVALID_PROFILEID 1
-
+#define FIZEAU_RC_MODULE R_MODULE(0xf12)
+#define FIZEAU_RC_INVALID_REQUEST 2
 #define FIZEAU_MAKERESULT(r) MAKERESULT(FIZEAU_RC_MODULE, FIZEAU_RC_ ## r)
 
 typedef struct {
@@ -60,18 +49,15 @@ typedef struct {
     Gamma       gamma;
     Luminance   luminance;
     ColorRange  range;
+    FakeHdr     fake_hdr;
 } FizeauSettings;
 
 typedef struct {
-    FizeauSettings day_settings, night_settings;
+    FizeauSettings settings;
     Component components;
     Component filter;
-
-    Time dusk_begin, dusk_end;
-    Time dawn_begin, dawn_end;
-
     Time dimming_timeout;
-} FizeauProfile;
+} FizeauConfiguration;
 
 Result fizeauIsServiceActive(bool *out);
 Result fizeauInitialize();
@@ -82,11 +68,8 @@ Service *fizeauGetServiceSession();
 Result fizeauGetIsActive(bool *is_active);
 Result fizeauSetIsActive(bool is_active);
 
-Result fizeauGetProfile(FizeauProfileId id, FizeauProfile *profile);
-Result fizeauSetProfile(FizeauProfileId id, FizeauProfile *profile);
-
-Result fizeauGetActiveProfileId(bool is_external, FizeauProfileId *id);
-Result fizeauSetActiveProfileId(bool is_external, FizeauProfileId id);
+Result fizeauGetConfiguration(FizeauConfiguration *configuration);
+Result fizeauSetConfiguration(const FizeauConfiguration *configuration);
 
 #ifdef __cplusplus
 }

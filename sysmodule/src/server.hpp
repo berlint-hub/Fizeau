@@ -19,7 +19,7 @@
 
 #include "context.hpp"
 #include "ipc_server.h"
-#include "profile.hpp"
+#include "display_manager.hpp"
 
 namespace fz {
 
@@ -29,7 +29,7 @@ class Server: public IpcServer {
         constexpr static inline int ServiceNumSessions = 2;
 
     public:
-        constexpr Server(Context &context, ProfileManager &profile): IpcServer(), context(context), profile(profile) { }
+        constexpr Server(Context &context, DisplayManager &manager): IpcServer(), context(context), manager(manager) { }
 
         Result initialize() {
             return ipcServerInit(this, Server::ServiceName.data(), Server::ServiceNumSessions);
@@ -62,7 +62,7 @@ class Server: public IpcServer {
 
     private:
         Context &context;
-        ProfileManager &profile;
+        DisplayManager &manager;
 
         bool running = false;
 };

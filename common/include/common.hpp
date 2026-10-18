@@ -20,7 +20,6 @@
 #ifdef __cplusplus
 #   include "color.hpp"
 #   include "config.hpp"
-#   include "time.hpp"
 #endif // __cplusplus
 
 #include "fizeau.h"

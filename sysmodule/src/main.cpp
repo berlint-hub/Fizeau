@@ -23,7 +23,7 @@
 #include <common.hpp>
 
 #include "context.hpp"
-#include "profile.hpp"
+#include "display_manager.hpp"
 #include "nvdisp.hpp"
 #include "server.hpp"
 
@@ -116,12 +116,12 @@ void __appExit(void) {
 
 static constinit fz::Context           context = {};
 static constinit fz::DisplayController disp    = {};
-static constinit fz::ProfileManager    profile(context, disp);
-static constinit fz::Server            server (context, profile);
+static constinit fz::DisplayManager    manager(context, disp);
+static constinit fz::Server            server (context, manager);
 
 FsFile find_config_file(FsFileSystem fs) {
     FsFile fp = {};
-    char buf[FS_MAX_PATH];
+    char buf[FS_MAX_PATH] = {};
     for (auto path: fz::Config::config_locations) {
         std::strncpy(buf, path.data(), sizeof(buf) - 1);
         if (auto rc = fsFsOpenFile(&fs, buf, FsOpenMode_Read, &fp); R_SUCCEEDED(rc))
@@ -134,12 +134,12 @@ bool parse_config() {
     auto rc = fsInitialize();
     FZ_SCOPEGUARD([] { fsExit(); });
 
-    FsFileSystem fs;
+    FsFileSystem fs = {};
     if (R_SUCCEEDED(rc))
         rc = fsOpenSdCardFileSystem(&fs);
     FZ_SCOPEGUARD([&fs] { fsFsClose(&fs); });
 
-    FsFile fp;
+    FsFile fp = {};
     FZ_SCOPEGUARD([&fp] { fsFileClose(&fp); });
     if (R_SUCCEEDED(rc))
         fp = find_config_file(fs);
@@ -148,18 +148,11 @@ bool parse_config() {
         return false;
 
     struct FileReadContext {
-        FsFile fp;
+        FsFile fp = {};
         std::uint64_t off = 0;
     } read_ctx = { fp };
 
     fz::Config config;
-    config.parse_profile_switch_action = +[](fz::Config *self, FizeauProfileId profile_id) {
-        if (self->cur_profile_id == FizeauProfileId_Invalid)
-            return;
-        context.profiles[self->cur_profile_id] = self->profile;
-        self->profile = {};
-    };
-
     ini_reader reader = +[](char *str, int num, void *stream) -> char * {
         auto *p = str;
         auto *read_ctx = static_cast<FileReadContext *>(stream);
@@ -167,8 +160,13 @@ bool parse_config() {
         while (--num > 1) {
             char dat;
             std::uint64_t read;
-            if (auto rc = fsFileRead(&read_ctx->fp, read_ctx->off, &dat, sizeof(dat), FsReadOption_None, &read); R_FAILED(rc) || !read)
+            if (auto rc = fsFileRead(&read_ctx->fp, read_ctx->off, &dat, sizeof(dat), FsReadOption_None, &read); R_FAILED(rc))
                 return nullptr;
+            if (!read) {
+                if (p == str)
+                    return nullptr;
+                break;
+            }
 
             read_ctx->off += read;
             if (dat == '\n' || dat == '\r')
@@ -182,9 +180,9 @@ bool parse_config() {
     };
 
     if (auto res = ini_parse_stream(reader, &read_ctx, fz::Config::ini_handler, &config); !res) {
-        context.is_active        = config.active;
-        context.internal_profile = config.internal_profile;
-        context.external_profile = config.external_profile;
+        config.sanitize();
+        context.is_active = config.active;
+        context.configuration = config.configuration;
     }
 
     return true;
@@ -198,17 +196,16 @@ int main(int argc, char **argv) {
         diagAbortWithResult(rc);
     context.is_lite = hw_type == 2; // Hoag
 
-    if (auto rc = fz::Clock::initialize(); R_FAILED(rc))
-        diagAbortWithResult(rc);
-
     if (auto rc = disp.initialize(); R_FAILED(rc))
         diagAbortWithResult(rc);
 
-    if (auto rc = profile.initialize(); R_FAILED(rc))
+    parse_config();
+
+    if (auto rc = manager.initialize(); R_FAILED(rc))
         diagAbortWithResult(rc);
 
-    if (parse_config())
-        profile.apply();
+    if (auto rc = manager.apply(); R_FAILED(rc))
+        diagAbortWithResult(rc);
 
     LOG("Starting server\n");
     if (auto rc = server.initialize(); R_FAILED(rc))
@@ -217,7 +214,7 @@ int main(int argc, char **argv) {
     server.loop();
 
     server .finalize();
-    profile.finalize();
+    manager.finalize();
     disp   .finalize();
 
     LOG("Exiting\n");

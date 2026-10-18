@@ -64,38 +64,14 @@ Result fizeauSetIsActive(bool is_active) {
     return serviceDispatchIn(&g_fizeau_srv, FizeauCommandId_SetIsActive, is_active);
 }
 
-Result fizeauGetProfile(FizeauProfileId id, FizeauProfile *profile) {
-    FizeauProfile tmp;
-    Result rc = serviceDispatchInOut(&g_fizeau_srv, FizeauCommandId_GetProfile, id, tmp);
-
-    if (R_SUCCEEDED(rc) && profile)
-        *profile = tmp;
-
+Result fizeauGetConfiguration(FizeauConfiguration *configuration) {
+    FizeauConfiguration tmp;
+    Result rc = serviceDispatchOut(&g_fizeau_srv, FizeauCommandId_GetConfiguration, tmp);
+    if (R_SUCCEEDED(rc) && configuration)
+        *configuration = tmp;
     return rc;
 }
 
-Result fizeauSetProfile(FizeauProfileId id, FizeauProfile *profile) {
-    struct {
-        FizeauProfileId id;
-        FizeauProfile profile;
-    } tmp = { id, *profile };
-    return serviceDispatchIn(&g_fizeau_srv, FizeauCommandId_SetProfile, tmp);
-}
-
-Result fizeauGetActiveProfileId(bool is_external, FizeauProfileId *id) {
-    FizeauProfileId tmp;
-    Result rc = serviceDispatchInOut(&g_fizeau_srv, FizeauCommandId_GetActiveProfileId, is_external, tmp);
-
-    if (R_SUCCEEDED(rc) && id)
-        *id = tmp;
-
-    return rc;
-}
-
-Result fizeauSetActiveProfileId(bool is_external, FizeauProfileId id) {
-    struct {
-        bool is_external;
-        FizeauProfileId id;
-    } tmp = { is_external, id };
-    return serviceDispatchIn(&g_fizeau_srv, FizeauCommandId_SetActiveProfileId, tmp);
+Result fizeauSetConfiguration(const FizeauConfiguration *configuration) {
+    return serviceDispatchIn(&g_fizeau_srv, FizeauCommandId_SetConfiguration, *configuration);
 }
