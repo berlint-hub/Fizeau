@@ -212,6 +212,9 @@ Result draw_correction_tab(Config &ctx) {
     im::SeparatorText("Fake HDR (SDR effect)");
     (void)new_slider("##hdrd", ctx.configuration.settings.fake_hdr, MIN_FAKE_HDR, MAX_FAKE_HDR, "%.2f");
 
+    im::SeparatorText("Shadow detail gamma");
+    (void)new_slider("##shadowgamma", ctx.configuration.settings.shadow_gamma, MIN_SHADOW_GAMMA, MAX_SHADOW_GAMMA, "%.2f");
+
     // Luminance sliders
     im::SeparatorText("Luminance");
     (void)new_slider("##lumad", ctx.configuration.settings.luminance, MIN_LUMA, MAX_LUMA, "%.2f", true);
@@ -283,6 +286,13 @@ R"(Fake HDR adds a smooth SDR contrast curve.
 HDR output or increase the display peak brightness.
 The image preview only shows matrix corrections;
 use the gamma ramp plot to inspect this curve.)");
+        im::BulletText(
+R"(Shadow detail gamma adjusts dark tones only.
+1.00 is neutral. Higher values lift shadows;
+lower values darken them. Black stays black, and
+the effect fades out by half brightness. It does
+not recover detail already lost in the image.
+Only the gamma ramp plot previews this effect.)");
         im::BulletText(
 R"(The gamma slider adjusts the regamma ramp.
 This can be useful on bad/old monitors.)");
@@ -397,6 +407,7 @@ void draw_graph_window(Config &ctx) {
     regamma_ramp(lut2.data(), lut2.size(), set.gamma, 8, 0.0f, 1.0f, off);
 
     apply_fake_hdr(lut2.data(), lut2.size(), 8, set.fake_hdr);
+    apply_shadow_gamma(lut2.data(), lut2.size(), 8, set.shadow_gamma);
     apply_luma(lut2.data(), lut2.size(), 8, set.luminance);
     apply_range(lut2.data(), lut2.size(), 8, set.range.lo, std::min(set.range.hi, lut2.back() / 255.0f));
 

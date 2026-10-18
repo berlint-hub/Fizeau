@@ -57,6 +57,11 @@ typedef float Gamma;
 #define MAX_GAMMA     5.0f
 #define DEFAULT_GAMMA 2.4f
 
+typedef float ShadowGamma;
+#define MIN_SHADOW_GAMMA     0.5f
+#define MAX_SHADOW_GAMMA     1.5f
+#define DEFAULT_SHADOW_GAMMA 1.0f
+
 typedef float FakeHdr;
 #define MIN_FAKE_HDR     0.0f
 #define MAX_FAKE_HDR     1.0f

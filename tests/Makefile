@@ -6,13 +6,18 @@ INCLUDES = -Isupport -I../common/include -I../lib/inih/include
 HEADERS = $(wildcard ../common/include/*.h*) support/switch.h
 
 .PHONY: test clean
-test: build/fake_hdr_test build/config_test
+test: build/fake_hdr_test build/shadow_gamma_test build/config_test
 	./build/fake_hdr_test
+	./build/shadow_gamma_test
 	./build/config_test
 
 build/fake_hdr_test: fake_hdr_test.cpp ../common/src/color.cpp ../common/src/config_parse.cpp $(HEADERS)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) $(INCLUDES) fake_hdr_test.cpp ../common/src/color.cpp ../common/src/config_parse.cpp -o $@
+
+build/shadow_gamma_test: shadow_gamma_test.cpp ../common/src/color.cpp $(HEADERS)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) $(INCLUDES) shadow_gamma_test.cpp ../common/src/color.cpp -o $@
 
 build/ini.o: ../lib/inih/inih/ini.c ../lib/inih/inih/ini.h
 	@mkdir -p build

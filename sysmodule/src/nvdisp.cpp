@@ -67,6 +67,9 @@ Cmu calculate_cmu(FizeauSettings &settings, Component components, Component filt
     // SDR contrast enhancement, before dimming and output range mapping.
     apply_fake_hdr(cmu.lut_2.data(), cmu.lut_2.size(), 8, settings.fake_hdr);
 
+    // Relative gamma confined to shadows; leaves upper tones unchanged.
+    apply_shadow_gamma(cmu.lut_2.data(), cmu.lut_2.size(), 8, settings.shadow_gamma);
+
     // Apply luminance
     apply_luma(cmu.lut_2.data(), cmu.lut_2.size(), 8, settings.luminance);
 

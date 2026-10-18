@@ -38,6 +38,7 @@ class Config {
             .luminance   = DEFAULT_LUMA,
             .range       = DEFAULT_RANGE,
             .fake_hdr    = DEFAULT_FAKE_HDR,
+            .shadow_gamma = DEFAULT_SHADOW_GAMMA,
         };
 
     public:

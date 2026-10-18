@@ -52,6 +52,7 @@ std::string Config::make() {
     str += "gamma = " + std::to_string(s.gamma) + '\n';
     str += "luminance = " + std::to_string(s.luminance) + '\n';
     str += "fake_hdr = " + std::to_string(s.fake_hdr) + '\n';
+    str += "shadow_gamma = " + std::to_string(s.shadow_gamma) + '\n';
     str += "range = " + std::to_string(s.range.lo) + "-" + std::to_string(s.range.hi) + '\n';
     std::string components;
     if (c.components & Component_Red) components += 'r';

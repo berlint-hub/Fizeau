@@ -32,9 +32,9 @@ extern "C" {
 typedef enum {
     FizeauCommandId_GetIsActive = 0,
     FizeauCommandId_SetIsActive = 1,
-    // IDs 2-7 are retired profile commands. Never reuse them.
-    FizeauCommandId_GetConfiguration = 8,
-    FizeauCommandId_SetConfiguration = 9,
+    // IDs 2-9 are retired profile/older configuration commands. Never reuse them.
+    FizeauCommandId_GetConfiguration = 10,
+    FizeauCommandId_SetConfiguration = 11,
 } FizeauCommandId;
 
 #define FIZEAU_RC_MODULE R_MODULE(0xf12)
@@ -50,6 +50,7 @@ typedef struct {
     Luminance   luminance;
     ColorRange  range;
     FakeHdr     fake_hdr;
+    ShadowGamma shadow_gamma;
 } FizeauSettings;
 
 typedef struct {

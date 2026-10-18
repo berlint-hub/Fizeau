@@ -202,6 +202,22 @@ tsl::elm::Element *FizeauOverlayGui::createUI() {
             val * (MAX_GAMMA - MIN_GAMMA) / 100 + MIN_GAMMA;
     });
 
+    this->shadow_gamma_slider = new tsl::elm::TrackBar("");
+    this->shadow_gamma_slider->setProgress(((this->config.configuration.settings.shadow_gamma) - MIN_SHADOW_GAMMA)
+        * 100 / (MAX_SHADOW_GAMMA - MIN_SHADOW_GAMMA));
+    this->shadow_gamma_slider->setClickListener([this](std::uint64_t keys) {
+        if (keys & HidNpadButton_Y) {
+            this->shadow_gamma_slider->setProgress((DEFAULT_SHADOW_GAMMA - MIN_SHADOW_GAMMA) * 100 / (MAX_SHADOW_GAMMA - MIN_SHADOW_GAMMA));
+            (this->config.configuration.settings.shadow_gamma) = DEFAULT_SHADOW_GAMMA;
+            return true;
+        }
+        return false;
+    });
+    this->shadow_gamma_slider->setValueChangedListener([this](std::uint8_t val) {
+        (this->config.configuration.settings.shadow_gamma) =
+            val * (MAX_SHADOW_GAMMA - MIN_SHADOW_GAMMA) / 100 + MIN_SHADOW_GAMMA;
+    });
+
     this->fake_hdr_slider = new tsl::elm::TrackBar("");
     this->fake_hdr_slider->setProgress(((this->config.configuration.settings.fake_hdr) - MIN_FAKE_HDR)
         * 100 / (MAX_FAKE_HDR - MIN_FAKE_HDR));
@@ -256,6 +272,7 @@ tsl::elm::Element *FizeauOverlayGui::createUI() {
     this->filter_header     = new tsl::elm::CategoryHeader("Filter");
     this->contrast_header   = new tsl::elm::CategoryHeader("");
     this->gamma_header      = new tsl::elm::CategoryHeader("");
+    this->shadow_gamma_header = new tsl::elm::CategoryHeader("");
     this->fake_hdr_header   = new tsl::elm::CategoryHeader("");
     this->luma_header       = new tsl::elm::CategoryHeader("");
 
@@ -279,6 +296,8 @@ tsl::elm::Element *FizeauOverlayGui::createUI() {
     list->addItem(this->contrast_slider);
     list->addItem(this->gamma_header);
     list->addItem(this->gamma_slider);
+    list->addItem(this->shadow_gamma_header);
+    list->addItem(this->shadow_gamma_slider);
     list->addItem(this->fake_hdr_header);
     list->addItem(this->fake_hdr_slider);
     list->addItem(this->luma_header);
@@ -303,6 +322,8 @@ void FizeauOverlayGui::update() {
         this->config.configuration.settings.contrast));
     this->gamma_header->setText(format("Gamma: %.2f",
         this->config.configuration.settings.gamma));
+    this->shadow_gamma_header->setText(format("Shadow detail gamma: %.2f",
+        this->config.configuration.settings.shadow_gamma));
     this->fake_hdr_header->setText(format("Fake HDR (SDR): %.2f",
         this->config.configuration.settings.fake_hdr));
     this->luma_header->setText(format("Luminance: %.2f",

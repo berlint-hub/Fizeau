@@ -24,7 +24,7 @@ void equal(const FizeauConfiguration &a, const FizeauConfiguration &b) {
     assert(x.temperature == y.temperature);
     for (auto [v, w] : {std::pair{x.saturation, y.saturation}, {x.hue, y.hue},
             {x.contrast, y.contrast}, {x.gamma, y.gamma}, {x.luminance, y.luminance},
-            {x.fake_hdr, y.fake_hdr}, {x.range.lo, y.range.lo}, {x.range.hi, y.range.hi}})
+            {x.fake_hdr, y.fake_hdr}, {x.shadow_gamma, y.shadow_gamma}, {x.range.lo, y.range.lo}, {x.range.hi, y.range.hi}})
         assert(std::abs(v - w) < 0.00001f);
     assert(a.components == b.components && a.filter == b.filter);
     assert(a.dimming_timeout == b.dimming_timeout);
@@ -48,13 +48,14 @@ extern "C" Result fizeauSetConfiguration(const FizeauConfiguration *value) {
 
 int main() {
     using fz::Config;
-    static_assert(FizeauCommandId_GetConfiguration == 8);
-    static_assert(FizeauCommandId_SetConfiguration == 9);
-    static_assert(sizeof(FizeauConfiguration) == 48);
+    static_assert(FizeauCommandId_GetConfiguration == 10);
+    static_assert(FizeauCommandId_SetConfiguration == 11);
+    static_assert(sizeof(FizeauConfiguration) == 52);
 
     Config config;
     assert(config.configuration.settings.temperature == DEFAULT_TEMP);
     assert(config.configuration.settings.fake_hdr == 0.0f);
+    assert(config.configuration.settings.shadow_gamma == DEFAULT_SHADOW_GAMMA);
     parse(config, R"(active = false
 [settings]
 temperature = 7200
@@ -62,6 +63,7 @@ saturation = 1.2
 hue = -0.3
 contrast = 1.1
 gamma = 2.6
+shadow_gamma = 1.25
 luminance = -0.2
 fake_hdr = 0.75
 range = 0.1-0.9
@@ -70,6 +72,7 @@ filter = green
 dimming_timeout = 03:24
 )");
     assert(!config.active);
+    assert(config.configuration.settings.shadow_gamma == 1.25f);
     assert(config.configuration.settings.fake_hdr == 0.75f);
     assert(config.configuration.components == (Component_Red | Component_Blue));
     assert(config.configuration.dimming_timeout == (Time{0, 3, 24}));
@@ -103,6 +106,7 @@ temperature_day = 4000
 )");
     assert(legacy.configuration.settings.temperature == 6000);
     assert(legacy.configuration.settings.fake_hdr == 0.5f);
+    assert(legacy.configuration.settings.shadow_gamma == DEFAULT_SHADOW_GAMMA);
     Config migrated;
     parse(migrated, legacy.make());
     equal(legacy.configuration, migrated.configuration);
@@ -134,7 +138,15 @@ temperature_day = 4000
     assert(another_client.reset() == 0);
     assert(live_configuration.settings.fake_hdr == DEFAULT_FAKE_HDR);
     assert(live_configuration.settings.temperature == DEFAULT_TEMP);
+    assert(live_configuration.settings.shadow_gamma == DEFAULT_SHADOW_GAMMA);
     assert(live_configuration.dimming_timeout == (Time{0, 3, 24}));
+    parse(malformed, "[settings]\nshadow_gamma = -2\n");
+    assert(malformed.configuration.settings.shadow_gamma == MIN_SHADOW_GAMMA);
+    parse(malformed, "[settings]\nshadow_gamma = 9\n");
+    assert(malformed.configuration.settings.shadow_gamma == MAX_SHADOW_GAMMA);
+    malformed.configuration.settings.shadow_gamma = std::numeric_limits<float>::quiet_NaN();
+    malformed.sanitize();
+    assert(malformed.configuration.settings.shadow_gamma == DEFAULT_SHADOW_GAMMA);
     service_result = 123;
     assert(config.update() == 123 && config.apply() == 123);
 

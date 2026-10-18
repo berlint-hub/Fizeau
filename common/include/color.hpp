@@ -23,6 +23,7 @@
 
 #include "types.h"
 #include "fake_hdr.hpp"
+#include "shadow_gamma.hpp"
 
 namespace fz {
 

@@ -154,6 +154,7 @@ int Config::ini_handler(void *user, const char *section, const char *name, const
     else if (key == "gamma") s.gamma = atof(v);
     else if (key == "luminance") s.luminance = atof(v);
     else if (key == "fake_hdr") s.fake_hdr = atof(v);
+    else if (key == "shadow_gamma") s.shadow_gamma = atof(v);
     else if (key == "components") c.components = parse_components(v);
     else if (key == "filter") c.filter = parse_filter(v);
     else if (key == "range" && v.find('-') != std::string_view::npos) s.range = parse_range(v);
@@ -176,6 +177,7 @@ void Config::sanitize() {
     s.gamma = finite_clamp(s.gamma, MIN_GAMMA, MAX_GAMMA, DEFAULT_GAMMA);
     s.luminance = finite_clamp(s.luminance, MIN_LUMA, MAX_LUMA, DEFAULT_LUMA);
     s.fake_hdr = finite_clamp(s.fake_hdr, MIN_FAKE_HDR, MAX_FAKE_HDR, DEFAULT_FAKE_HDR);
+    s.shadow_gamma = finite_clamp(s.shadow_gamma, MIN_SHADOW_GAMMA, MAX_SHADOW_GAMMA, DEFAULT_SHADOW_GAMMA);
     s.range.lo = finite_clamp(s.range.lo, MIN_RANGE, MAX_RANGE, MIN_RANGE);
     s.range.hi = finite_clamp(s.range.hi, s.range.lo, MAX_RANGE, MAX_RANGE);
     auto &c = this->configuration;

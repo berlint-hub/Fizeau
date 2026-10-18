@@ -54,6 +54,27 @@ The application and overlay load the running service's settings when opened,
 so reopening either does not replace live changes with old INI data.
 Manual INI edits are loaded by the sysmodule on restart.
 
+## Shadow detail gamma
+
+The **Correction** tab and Tesla overlay include **Shadow detail gamma**:
+
+- `1.00`: neutral (default), with no change to the existing image.
+- Above `1.00`: lift dark details; try `1.10` or `1.20` first.
+- Below `1.00`: darken shadows. The allowed range is `0.50–1.50`.
+
+This is a relative shadow adjustment, separate from the overall gamma (normally
+`2.40`). It operates on the lower half of the display-encoded tonal range, fading
+smoothly to no effect at half scale. Black remains black and upper tones are
+unchanged by this stage. It cannot restore detail already clipped by a game or
+another correction, and the 8-bit output can still show banding at strong settings.
+It applies after Fake HDR and before luminance/dimming and output range mapping.
+The gamma ramp plot includes it; the matrix-only image preview does not.
+
+Use `shadow_gamma = 1.0` in `[settings]`. Older INI files without this key retain
+the neutral default. Reset restores `1.00`; Y resets the overlay slider.
+As with previous updates, install the application, overlay and sysmodule together
+and reboot: the larger configuration uses new IPC command IDs for safety.
+
 ## Fake HDR
 
 In the application's **Correction** tab or the Tesla overlay, adjust **Fake HDR**
